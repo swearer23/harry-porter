@@ -1,10 +1,12 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 import axios, {AxiosResponse}  from 'axios'
 import sha256 from 'crypto-js/sha256';
 import hmacSHA512 from 'crypto-js/hmac-sha512';
 import Base64 from 'crypto-js/enc-base64';
 import { v4 as uuidv4 } from 'uuid';
+
+import init, {ron_weasley_sign} from "./pkg/ron_weasley.js";
 
 type EncryptedParams = {
   name: string;
@@ -14,57 +16,53 @@ type EncryptedParams = {
   sign?: string;
 }
 
-type SignatureInfo = {
-  cnonce: string;
-  flag: string;
-  sign: string;
-}
-
 defineProps<{ msg: string }>()
 
-const count = ref(0)
+const signatureInfo = ref(<String[]>[]);
 
-const randomNumber = () => {
-  const privateKey = 91
-  const salt = Math.floor(Math.random() * 100)
-  return {
-    salt,
-    pubkey: (salt * privateKey).toString(16)
-  }
+const encryptedSign = (message: string, cnonce: string): string => {
+  const secret = '123456'
+  const hashDigest = sha256(`${cnonce}|${message}`)
+  const hmacDigest = Base64.stringify(hmacSHA512(hashDigest.toString().toUpperCase(), secret))
+  return hmacDigest.toString().toUpperCase()
 }
 
-const encryptedSign = (message: string): SignatureInfo => {
-  const cnonce = uuidv4()
-  const {salt, pubkey} = randomNumber()
-  console.log("salt is ", salt)
-  const hashDigest = sha256(cnonce + '123456');
-  const hmacDigest = Base64.stringify(hmacSHA512(hashDigest, salt.toString()));
-  return {
-    cnonce: cnonce,
-    sign: hmacDigest,
-    flag: pubkey
-  }
-}
+onMounted(async () => {
+  await init()
+})
 
 const onClick = () => {
+  signatureInfo.value = []
   const params: EncryptedParams = {
     name: 'John',
     age: 23,
     breed: 'dog',
     ts: Date.now()
   }
-  const signatureInfo = encryptedSign(JSON.stringify(params))
-  console.log(signatureInfo)
-  axios.post('http://localhost:3000/test', {...params, ...signatureInfo}).then((res: AxiosResponse) => {
-    console.log(res.data)
-    count.value++
-  })
+  const cnonce = uuidv4()
+  signatureInfo.value.push(`cnonce: ${cnonce}`)
+  const cSignature= encryptedSign("hello world", cnonce)
+  signatureInfo.value.push(`cSignature: ${cSignature}`)
+
+  async function runWasm () {
+    const wasmSignature = ron_weasley_sign("hello world", cnonce)
+    signatureInfo.value.push(`wasmSignature: ${wasmSignature}`)
+    if (wasmSignature != cSignature) {
+      signatureInfo.value.push(`wasm signature is not equal to c signature`)
+    } else {
+      signatureInfo.value.push(`wasm signature is equal to c signature`) 
+    }
+  }
+  runWasm()
 }
 </script>
 
 <template>
   <h1>{{ msg }}</h1>
 
+  <template v-for="item in signatureInfo">
+    <p>{{ item }}</p>
+  </template>
   <p>
     Recommended IDE setup:
     <a href="https://code.visualstudio.com/" target="_blank">VSCode</a>
@@ -82,7 +80,7 @@ const onClick = () => {
     <a href="https://v3.vuejs.org/" target="_blank">Vue 3 Docs</a>
   </p>
 
-  <button type="button" @click="onClick">count is: {{ count }}</button>
+  <button type="button" @click="onClick">click me for signature</button>
   <p>
     Edit
     <code>components/HelloWorld.vue</code> to test hot module replacement.
