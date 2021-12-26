@@ -21,7 +21,7 @@ defineProps<{ msg: string }>()
 const signatureInfo = ref(<String[]>[]);
 
 const encryptedSign = (message: string, cnonce: string): string => {
-  const secret = '123456'
+  const secret = '123456' // replace this with your own secret paired with wasm file
   const hashDigest = sha256(`${cnonce}|${message}`)
   const hmacDigest = Base64.stringify(hmacSHA512(hashDigest.toString().toUpperCase(), secret))
   return hmacDigest.toString().toUpperCase()
